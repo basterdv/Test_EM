@@ -1,14 +1,19 @@
 from rest_framework import serializers
 from django.shortcuts import get_object_or_404
 from .models import User
+from .utils import get_user_permission_codes,create_access_token
 
+class   UserListSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    class Meta:
+        model = User
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'id', 'first_name', 'last_name', 'patronymic',
-            'email', 'is_active', 'created_at', 'updated_at'
+            'id', 'first_name', 'last_name', 'email', 'is_active', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'is_active', 'created_at', 'updated_at')
 
@@ -39,20 +44,29 @@ class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
-    def validate(self, data):
-        email = data['email']
-        password = data['password']
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
 
         user = get_object_or_404(User, email=email)
 
         if not user.is_active:
-            raise serializers.ValidationError("User is deactivated")
+            raise serializers.ValidationError({"detail": "Аккаунт удален (мягкое удаление)."})
 
         if not user.check_password(password):
-            raise serializers.ValidationError("Invalid credentials")
+            raise serializers.ValidationError({"detail": "Неверные учетные данные."})
 
-        data['user'] = user
-        return data
+        return {'user': user}
+
+    def create(self, validated_data):
+        user = validated_data['user']
+        perms = get_user_permission_codes(user)
+        token = create_access_token(user, perms)
+
+        return {
+            "token": token,
+            "user": UserProfileSerializer(user).data,
+        }
 
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
