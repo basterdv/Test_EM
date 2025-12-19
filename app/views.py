@@ -6,7 +6,7 @@ from rest_framework import status
 from .serializers import  RegisterSerializer, UserProfileSerializer, LoginSerializer,UserListSerializer,UpdateProfileSerializer
 from rest_framework import permissions
 from .backends import JWTAuthentication
-
+from rest_framework.permissions import IsAuthenticated
 from .models import User
 
 class ListUser(APIView):
@@ -43,7 +43,10 @@ class MeView(APIView):
         return Response(UserProfileSerializer(user).data)
 
 
-
+class TestView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        return Response({'message': 'Вы успешно авторизованы'})
 
 
 class RegisterView(APIView):
