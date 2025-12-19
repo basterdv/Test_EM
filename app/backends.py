@@ -7,7 +7,9 @@ import jwt
 
 class JWTAuthentication(BaseAuthentication):
     def authenticate(self, request):
+
         auth_header = request.headers.get('Authorization', '')
+        print(auth_header)
         if not auth_header.startswith('Bearer '):
             return None
 
