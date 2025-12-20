@@ -26,6 +26,7 @@ INSTALLED_APPS = [
 
     'app',
     'rest_framework',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -36,6 +37,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'app.middleware.JWTAuthMiddleware'
 ]
 
 ROOT_URLCONF = "test_em.urls"
@@ -104,13 +106,17 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "static"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "app.backends.JWTAuthentication",
+        'rest_framework.authentication.SessionAuthentication',
+
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
@@ -123,10 +129,31 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_TOKEN": None,
 }
 
-
-
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
 
 AUTH_USER_MODEL = 'app.User'
+
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
+    'API_URL': '/api/',  # базовый URL для вашего API
+    'DOC_EXPANSION': 'none',  # Сворачивает все эндпоинты по умолчанию
+    # 'DEFAULT_AUTO_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
+    'VALIDATOR_URL': None,  # Отключает валидацию Swagger
+    'OPERATIONS_SORTER': 'alpha',
+    'TAGS_SORTER': 'alpha',
+    'SHOW_REQUEST_HEADERS': True,  # Показывает заголовки запроса
+    'SUPPORTED_SUBMIT_METHODS': ['get', 'post', 'put', 'delete', 'patch'],
+    'SECURITY': [{'sessionAuth': []}],
+    'PERSIST_AUTH': True,  # Сохраняет авторизацию между запросами
+    'SECURITY_DEFINITIONS': {
+        'sessionAuth': {
+            'type': 'apiKey',
+            'description': (
+                'Куки-токен для аутентификации. Передавайте его в заголовке `Authorization` в формате `Bearer <sessionid>`'),
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+}

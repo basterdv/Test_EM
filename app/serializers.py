@@ -1,3 +1,4 @@
+from django.contrib.auth import login
 from rest_framework import serializers
 from django.shortcuts import get_object_or_404
 from .models import User
@@ -43,6 +44,7 @@ class RegisterSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+    token = serializers.CharField(max_length=255, read_only=True)
 
     def validate(self, attrs):
         email = attrs.get('email')
@@ -67,6 +69,7 @@ class LoginSerializer(serializers.Serializer):
             "token": token,
             "user": UserProfileSerializer(user).data,
         }
+
 
 
 class UpdateProfileSerializer(serializers.ModelSerializer):

@@ -133,3 +133,10 @@ class RolePermission(models.Model):
 
     class Meta:
         unique_together = ('role', 'permission')
+
+class Session(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    session_id = models.CharField(max_length=255, unique=True)
+    expire_at = models.DateTimeField()
+    def __str__(self):
+        return f"Сессия для {self.user.email} с id {self.session_id}"
