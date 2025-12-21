@@ -25,7 +25,6 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractBaseUser,PermissionsMixin):
-
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
@@ -74,7 +73,6 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
-
 class UserRole(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles')
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_users')
@@ -104,7 +102,7 @@ class UserRole(models.Model):
 
 class Permission(models.Model):
     """
-        конкретное действие над конкретным ресурсом
+        действие над конкретным ресурсом
         тип разрешённого действия ("Чтение", "Обновление", ...).
     """
     # resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name='permissions')
@@ -137,6 +135,9 @@ class RolePermission(models.Model):
 class Session(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     session_id = models.CharField(max_length=255, unique=True)
+    token_id = models.CharField(max_length=1000, unique=True)
+
     expire_at = models.DateTimeField()
-    def __str__(self):
-        return f"Сессия для {self.user.email} с id {self.session_id}"
+
+    # def __str__(self):
+    #     return f"Сессия для {self.user.email} с id {self.session_id}"
