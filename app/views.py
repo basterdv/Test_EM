@@ -304,13 +304,19 @@ class AdminRolesView(APIView):
     def get(self, request):
         data = []
         for role in Role.objects.all():
+            print(role)
             perms = []
             rps = role.role_permissions.select_related(
-                'permission__resource',
                 'permission__action'
             )
-            for rp in rps:
-                perms.append(rp.permission.code())
+
+            # rps = role.role_permissions.select_related(
+            #     # 'permission__resource',
+            #     'permission__action'
+            # )
+            print(rps)
+            # for rp in rps:
+            #     perms.append(rp.permission.code())
 
             data.append({
                 "role_id": role.id,

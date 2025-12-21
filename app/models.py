@@ -3,6 +3,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 
+
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -24,7 +25,8 @@ class UserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, password, **extra_fields)
 
-class User(AbstractBaseUser,PermissionsMixin):
+
+class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
@@ -42,12 +44,10 @@ class User(AbstractBaseUser,PermissionsMixin):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
-
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
         ordering = ('email',)
-
 
     def set_password(self, raw_password: str):
         self.password_hash = make_password(raw_password)
@@ -57,6 +57,7 @@ class User(AbstractBaseUser,PermissionsMixin):
 
     def __str__(self):
         return self.email
+
 
 class Role(models.Model):
     """
@@ -73,6 +74,7 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
+
 class UserRole(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles')
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_users')
@@ -81,32 +83,21 @@ class UserRole(models.Model):
         unique_together = ('user', 'role')
 
 
-# class Resource(models.Model):
-#     name = models.CharField(max_length=100, unique=True)
-#     description = models.TextField(blank=True, default='')
-#
-#     def __str__(self):
-#         return self.name
-
-
-# class Action(models.Model):
-#     """
-#          тип разрешённого действия ("Чтение", "Обновление", ...).
-#     """
-#     name = models.CharField(max_length=50, unique=True)  # "Чтение", "Обновление", и т.д
-#     description = models.TextField(blank=True, default='')
-#
-#     def __str__(self):
-#         return self.name
-
-
-class Permission(models.Model):
+class Resource(models.Model):
     """
-        действие над конкретным ресурсом
-        тип разрешённого действия ("Чтение", "Обновление", ...).
+            ресурсы   ("adminpanel", "reports", ...).
     """
-    # resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name='permissions')
-    # name = models.ForeignKey(Action, on_delete=models.CASCADE, related_name='permissions')
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return self.name
+
+
+class Action(models.Model):
+    """
+         тип разрешённого действия ("Чтение", "Обновление", ...).
+    """
     name = models.CharField(max_length=50, unique=True)  # "Чтение", "Обновление", и т.д
     description = models.TextField(blank=True, default='')
 
@@ -115,14 +106,28 @@ class Permission(models.Model):
         verbose_name_plural = 'Доступы'
         ordering = ('name',)
 
-        # unique_together = ('resource', 'action')
+    def __str__(self):
+        return self.name
 
-    # def code(self):
-    #     return f"{self.resource.name}:{self.action.name}"
+
+class Permission(models.Model):
+    """
+        действие над конкретным ресурсом
+        тип разрешённого действия ("Чтение", "Обновление", ...).
+    """
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name='permissions')
+    action = models.ForeignKey(Action, on_delete=models.CASCADE,
+                               related_name='permissions')  # "Чтение", "Обновление", и т.д
+    description = models.TextField(blank=True, default='')
+
+    class Meta:
+        unique_together = ('resource', 'action')
+
+    def code(self):
+        return f"{self.resource.name}:{self.action.name}"
 
     def __str__(self):
-        # return self.code()
-        return self.name
+        return self.code()
 
 
 class RolePermission(models.Model):
@@ -131,6 +136,7 @@ class RolePermission(models.Model):
 
     class Meta:
         unique_together = ('role', 'permission')
+
 
 class Session(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

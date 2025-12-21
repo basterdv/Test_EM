@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import User, Role, Permission
+from .models import User, Role
 
 
 class UserAdmin(admin.ModelAdmin):
@@ -19,12 +19,6 @@ class UserRole(admin.ModelAdmin):
         'description',
     )
 
-class UserPermission(admin.ModelAdmin):
-    list_display = (
-        'name',
-        'description',
-    )
 
 admin.site.register(User, UserAdmin)
 admin.site.register(Role, UserRole)
-admin.site.register(Permission, UserPermission)
