@@ -27,6 +27,9 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    """
+            Модель пользователя
+    """
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
@@ -76,6 +79,9 @@ class Role(models.Model):
 
 
 class UserRole(models.Model):
+    """
+           Промежуточная таблица для связи Пользователей и Ролей
+    """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles')
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_users')
 
@@ -114,8 +120,7 @@ class Action(models.Model):
 
 class Permission(models.Model):
     """
-        действие над конкретным ресурсом
-        тип разрешённого действия ("Чтение", "Обновление", ...).
+       Определенный доступ для конкретного ресурса
     """
     resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name='permissions')
     action = models.ForeignKey(Action, on_delete=models.CASCADE,
@@ -133,6 +138,9 @@ class Permission(models.Model):
 
 
 class RolePermission(models.Model):
+    """
+            Промежуточная таблица для связи ролей и Доступа
+    """
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_permissions')
     permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name='permission_roles')
 
@@ -143,11 +151,11 @@ class RolePermission(models.Model):
 
 
 class Session(models.Model):
+    """
+            Таблица сессий
+    """
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     session_id = models.CharField(max_length=255, unique=True)
     token_id = models.CharField(max_length=1000, unique=True)
 
     expire_at = models.DateTimeField()
-
-    # def __str__(self):
-    #     return f"Сессия для {self.user.email} с id {self.session_id}"

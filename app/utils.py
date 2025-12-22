@@ -4,6 +4,9 @@ from django.conf import settings
 
 
 def create_access_token(user, permissions: set[str], session_id, ttl_hours=12):
+    """
+               Создание токена
+    """
     now = datetime.now(tz=pytimezone.utc)
 
     payload = {
@@ -25,6 +28,9 @@ def create_access_token(user, permissions: set[str], session_id, ttl_hours=12):
 
 
 def get_user_permission_codes(user):
+    """
+               Создание списка разрешений
+    """
     codes = set()
 
     for ur in user.user_roles.select_related('role'):

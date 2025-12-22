@@ -1,23 +1,23 @@
+import uuid
+
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+from django.utils import timezone
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+from faker import Faker
 from rest_framework import exceptions
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from app.backends import JWTAuthentication
+from .models import User, Session, Role, RolePermission, Permission, UserRole
 from .permissions import HasActiveSession, NoActiveSession, RequirePermission
 from .serializers import RegisterSerializer, UserProfileSerializer, LoginSerializer, UserListSerializer, \
-    PermissionAddSerializer,GrantRoleSerializer
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from app.backends import JWTAuthentication
-
-from .models import User, Session, Role, RolePermission, Permission, UserRole
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-import uuid
-from django.utils import timezone
-
-from faker import Faker
+    PermissionAddSerializer, GrantRoleSerializer
 
 fake = Faker(['ru_RU'])
 
@@ -34,27 +34,89 @@ FAKE_REPORTS = [
 
 
 class ListUser(APIView):
+    """
+        Список пользователей
+        Доступ: право 'reports:read' (403).
+    """
+
     authentication_classes = [JWTAuthentication]
     permission_classes = [HasActiveSession, RequirePermission.as_perm("reports", "read")]
 
+    @swagger_auto_schema(
+        operation_summary="Получить список пользователей",
+        operation_description="Доступ только для пользователей с правом 'reports:read'.",
+        responses={
+            200: openapi.Response(
+                description="Список пользователей успешно получен",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'users': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_OBJECT),
+                            description="Массив объектов пользователей"
+                        )
+                    }
+                )
+            ),
+            403: "Ошибка доступа (недостаточно прав)",
+            401: "Ошибка авторизации (токен невалиден)"
+        },
+        tags=['Пользователи']
+    )
     def get(self, request, *args, **kwargs):
         users_list = User.objects.all()
 
         serializer = UserListSerializer(users_list, many=True).data
-
-        # return Response({'users':list(users_list)}, status=status.HTTP_200_OK)
         return Response({'users': serializer}, status=status.HTTP_200_OK)
 
 
 class ReportsListView(APIView):
     """
-    Получение списка отчетов.
-    Доступ: Требуется валидный JWT + Сессия в БД (401)
-    и право 'reports:read' (403).
+        Получение списка отчетов.
+        Доступ: Требуется валидный JWT + Сессия в БД (401)
+        и право 'reports:read' (403).
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("reports", "read")]
 
+    @swagger_auto_schema(
+        operation_summary="Получение списка отчетов",
+        operation_description="Метод возвращает все доступные отчеты. Требуется право доступа 'reports:read'.",
+        responses={
+            200: openapi.Response(
+                description="Успешный ответ со списком отчетов",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'count': openapi.Schema(
+                            type=openapi.TYPE_INTEGER,
+                            description="Общее количество отчетов"
+                        ),
+                        'reports': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description="ID отчета"),
+                                    'title': openapi.Schema(type=openapi.TYPE_STRING, description="Заголовок отчета"),
+                                    'status': openapi.Schema(type=openapi.TYPE_STRING, description="Текущий статус")
+                                }
+                            ),
+                            description="Массив объектов отчетов"
+                        ),
+                    }
+                ),
+                example={
+                    "count": 2,
+                    "reports": FAKE_REPORTS
+                }
+            ),
+            401: "Ошибка авторизации (недействительный JWT или сессия)",
+            403: "Недостаточно прав (отсутствует reports:read)"
+        },
+        tags=['Отчетность']
+    )
     def get(self, request):
         return Response({
             "count": len(FAKE_REPORTS),
@@ -64,18 +126,56 @@ class ReportsListView(APIView):
 
 class ReportsUpdateView(APIView):
     """
-    Обновление отчета.
-    Доступ: право 'reports:update' (403).
+        Обновление отчета.
+        Доступ: право 'reports:update' (403).
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("reports", "update")]
 
+    @swagger_auto_schema(
+        operation_summary="Обновление данных отчета",
+        operation_description="Обновляет состояние отчета по его ID. Требуется право: reports:update.",
+        manual_parameters=[
+            openapi.Parameter(
+                'report_id',
+                openapi.IN_PATH,
+                description="Уникальный идентификатор отчета",
+                type=openapi.TYPE_INTEGER,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Отчет успешно обновлен",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, example="success"),
+                        'updated_report': openapi.Schema(type=openapi.TYPE_STRING,
+                                                         description="Название обновленного отчета"),
+                        'modified_at': openapi.Schema(type=openapi.TYPE_STRING, format="date-time",
+                                                      description="Время изменения")
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description="Ошибка: Отчет не найден",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Отчет не найден")}
+                )
+            ),
+            403: "Ошибка доступа: недостаточно прав",
+            401: "Ошибка авторизации: невалидный токен"
+        },
+        tags=['Отчетность']
+    )
     def post(self, request, report_id: int):
-        # Поиск отчета в нашем фейковом списке
+        # Поиск отчета в  фейковом списке
         report = next((r for r in FAKE_REPORTS if r["id"] == report_id), None)
 
         if not report:
-            return Response({"error": "Report not found"}, status=404)
+            return Response({"error": "Отчет не найден"}, status=404)
 
         return Response({
             "status": "success",
@@ -83,46 +183,70 @@ class ReportsUpdateView(APIView):
             "modified_at": timezone.now().isoformat()
         })
 
+
 class MeView(APIView):
+    """
+        Проверка корректной аутентификации и авторизации
+        Доступ: Требуется валидный JWT + Сессия в БД (401)
+    """
     authentication_classes = [JWTAuthentication]
     permission_classes = [HasActiveSession]
 
     @swagger_auto_schema(
+        operation_summary="Профиль текущего пользователя",
+        operation_description="Метод позволяет проверить статус авторизации и получить данные профиля текущего пользователя.",
         responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'message': openapi.Schema(type=openapi.TYPE_STRING, description='Данные профиля пользователя')
-                }
+            200: openapi.Response(
+                description="Успешная авторизация",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            # Ссылка на поля сериализатора для автоматического описания
+                            description="Данные профиля пользователя (см. UserProfileSerializer)"
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example="Вы успешно авторизованы"
+                        )
+                    }
+                )
+            ),
+            401: openapi.Response(
+                description="Сессия не найдена или истекла",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'detail': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example="Вы не авторизированны на этом устройстве..."
+                        )
+                    }
+                )
             ),
             400: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка в запросе')
-                }
-            ),
-            500: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='ошибки сервера')
+                    'error': openapi.Schema(type=openapi.TYPE_STRING,
+                                            description="Ошибка базы данных или отсутствие объекта")
                 }
             ),
             403: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Доступ ограничен'),
-                    'details': openapi.Schema(type=openapi.TYPE_STRING,
-                                              description='Подробная информация о причине отказа в доступе')
+                    'error': openapi.Schema(type=openapi.TYPE_STRING,
+                                            description="Ошибка доступа или невалидные учетные данные")
                 }
             ),
-            401: openapi.Schema(
+            500: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'detail': openapi.Schema(type=openapi.TYPE_STRING, description='Вы не авторизированны')
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description="Внутренняя ошибка сервера")
                 }
             )
         },
-        security=[{'sessionAuth': []}]
+        tags=['Профиль']
     )
     def get(self, request):
         try:
@@ -163,8 +287,41 @@ class MeView(APIView):
 
 
 class DeleteMeView(APIView):
+    """
+        Мягкое удаление пользователя который в данный момент аутентифицирован и авторизирован
+        Доступ: Требуется валидный JWT + Сессия в БД (401)
+    """
     authentication_classes = [JWTAuthentication]
 
+    @swagger_auto_schema(
+        operation_summary="Удаление текущего профиля",
+        operation_description=(
+                "Выполняет мягкое удаление (деактивацию) учетной записи текущего пользователя. "
+                "После выполнения устанавливается флаг is_active = False, а сессия удаляется из куки."
+        ),
+        responses={
+            204: openapi.Response(
+                description="Пользователь успешно деактивирован. Контент не возвращается.",
+                # Несмотря на 204, для документации можно описать ожидаемое сообщение
+                examples={"application/json": {"message": "Пользователь admin удалён успешно"}}
+            ),
+            401: openapi.Response(
+                description="Неавторизованный доступ",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={'detail': openapi.Schema(type=openapi.TYPE_STRING, example="Доступ запрещен")}
+                )
+            ),
+            400: openapi.Response(
+                description="Ошибка при выполнении операции",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={'detail': openapi.Schema(type=openapi.TYPE_STRING)}
+                )
+            )
+        },
+        tags=['Профиль']
+    )
     def delete(self, request):
         user = getattr(request, 'user_obj', None)
         if not user:
@@ -184,6 +341,10 @@ class DeleteMeView(APIView):
 
 
 class RegisterView(APIView):
+    """
+        Регистрация нового пользователя
+        Доступ для всех
+    """
     permission_classes = [AllowAny, NoActiveSession]
 
     # Файковые данные для теста
@@ -197,38 +358,41 @@ class RegisterView(APIView):
     password = user_data.get('password')
 
     @swagger_auto_schema(
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['email', 'first_name', 'last_name', 'middle_name', 'password', 'password2'],
-            properties={
-                'email': openapi.Schema(type=openapi.TYPE_STRING, description='Email пользователя',
-                                        default=user_data.get('email')),
-                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='Имя пользователя',
-                                             default=user_data.get('first_name')),
-                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='Фамилия пользователя',
-                                            default=user_data.get('last_name')),
-                'middle_name': openapi.Schema(type=openapi.TYPE_STRING, description='Отчество пользователя',
-                                              default=user_data.get('middle_name')),
-                'password': openapi.Schema(type=openapi.TYPE_STRING, description='Пароль пользователя',
-                                           default=password),
-                'password_repeat': openapi.Schema(type=openapi.TYPE_STRING, description='Повтор пароля пользователя',
-                                                  default=password)
-            }
+        operation_summary="Регистрация нового пользователя",
+        operation_description=(
+                "Создает новую учетную запись в системе. "
+                "Пароль должен соответствовать требованиям безопасности (минимум 8 символов)."
         ),
+        # Указываем сериализатор для генерации полей ввода в Swagger
+        request_body=RegisterSerializer,
         responses={
-            201: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'message': openapi.Schema(type=openapi.TYPE_STRING, description='Успешная регистрация')
-                }
+            201: openapi.Response(
+                description="Пользователь успешно зарегистрирован",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example="Пользователь ivan@example.com зарегистрирован успешно"
+                        )
+                    }
+                )
             ),
-            400: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'detail': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка валидации данных')
-                }
+            400: openapi.Response(
+                description="Ошибка валидации данных",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'email': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING),
+                                                example=["Пользователь с таким email уже существует."]),
+                        'password': openapi.Schema(type=openapi.TYPE_ARRAY,
+                                                   items=openapi.Items(type=openapi.TYPE_STRING),
+                                                   example=["Пароль слишком короткий."])
+                    }
+                )
             )
-        }
+        },
+        tags=['Авторизация и Регистрация']
     )
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -240,38 +404,41 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+    """
+        Аутентификация пользователя
+        Доступ: для всех
+    """
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['email', 'password'],
-            properties={
-                'email': openapi.Schema(type=openapi.TYPE_STRING, description='Email пользователя',
-                                        default='root@root.ru'),
-                'password': openapi.Schema(type=openapi.TYPE_STRING, description='Пароль пользователя', default='root')
-            }
+        operation_summary="Авторизация пользователя",
+        operation_description=(
+                "Принимает email и password. Возвращает JWT-токен и устанавливает "
+                "HTTP-only куку 'sessionid'. Сессия действительна в течение 1 часа."
         ),
+        request_body=LoginSerializer,
         responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Ключ токена')
+            200: openapi.Response(
+                description="Успешный вход",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'token': openapi.Schema(type=openapi.TYPE_STRING, description="JWT access token"),
+                        'user': openapi.Schema(type=openapi.TYPE_OBJECT, description="Данные пользователя")
+                    }
+                ),
+                headers={
+                    'Set-Cookie': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        description="sessionid=...; HttpOnly; Secure; Expires=..."
+                    )
                 }
             ),
-            400: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка - ')
-                }
-            ),
-            500: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='ошибки сервера')
-                }
-            )
-        }
+            400: "Ошибка валидации (неверный формат данных)",
+            403: "Доступ запрещен (неверные учетные данные или заблокирован)",
+            500: "Внутренняя ошибка сервера (ошибка БД)"
+        },
+        tags=['Авторизация и Регистрация']
     )
     def post(self, request):
         session_id = uuid.uuid4().hex
@@ -316,24 +483,43 @@ class LoginView(APIView):
 
 
 class LogoutView(APIView):
-    # permission_classes = [HasActiveCustomSession]
+    """
+        Выход из текущей сессии
+    """
 
     @swagger_auto_schema(
+        operation_summary="Выход из системы",
+        operation_description=(
+                "Удаляет запись о сессии из базы данных и очищает куку 'sessionid' в браузере. "
+                "Если кука отсутствует, возвращается ошибка 400."
+        ),
         responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'message': openapi.Schema(type=openapi.TYPE_STRING, description='Успешный выход')
+            200: openapi.Response(
+                description="Успешное завершение сессии",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Успешный выход")
+                    }
+                ),
+                headers={
+                    'Set-Cookie': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        description="Удаление куки: sessionid=; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+                    )
                 }
             ),
-            401: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'detail': openapi.Schema(type=openapi.TYPE_STRING, description='Вы не авторизированны')
-                }
+            400: openapi.Response(
+                description="Невалидная сессия или отсутствие куки",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Ошибка сессии")
+                    }
+                )
             )
         },
-        security=[{'sessionAuth': []}]
+        tags=['Авторизация и Регистрация']
     )
     def post(self, request):
         session_id = request.COOKIES.get('sessionid')
@@ -348,9 +534,59 @@ class LogoutView(APIView):
 
 
 class AdminRolesView(APIView):
+    """
+        Получение списка ролей для администраторов.
+        Доступ: Требуется валидный JWT + Сессия в БД (401)
+        и право 'adminpanel:manage' (403).
+    """
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
 
+    @swagger_auto_schema(
+        operation_summary="Список ролей и прав доступа",
+        operation_description=(
+                "Возвращает все существующие в системе роли с полным списком связанных прав. "
+                "Доступно только для пользователей с правом 'adminpanel:manage'."
+        ),
+        responses={
+            200: openapi.Response(
+                description="Успешное получение списка ролей",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'roles': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'role_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="ID роли"),
+                                    'role_name': openapi.Schema(type=openapi.TYPE_STRING,
+                                                                description="Наименование роли"),
+                                    'permissions': openapi.Schema(
+                                        type=openapi.TYPE_ARRAY,
+                                        items=openapi.Items(type=openapi.TYPE_STRING),
+                                        description="Список кодов разрешений (например, 'reports:read')"
+                                    ),
+                                }
+                            )
+                        )
+                    }
+                ),
+                example={
+                    "roles": [
+                        {
+                            "role_id": 1,
+                            "role_name": "Администратор ВАК",
+                            "permissions": ["reports:read", "adminpanel:manage", "users:write"]
+                        }
+                    ]
+                }
+            ),
+            401: "Ошибка аутентификации (JWT/Сессия невалидны)",
+            403: "Ошибка доступа (отсутствует право adminpanel:manage)"
+        },
+        tags=['Администрирование']
+    )
     def get(self, request):
         data = []
         for role in Role.objects.all():
@@ -375,40 +611,60 @@ class AdminRolesView(APIView):
 
 
 class AdminGrantRoleView(APIView):
+    """
+        Назначить роль пользователю.
+        Доступ: Требуется валидный JWT + Сессия в БД (401)
+        и право 'adminpanel:manage' (403).
+    """
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
 
     @swagger_auto_schema(
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['permission'],
-            properties={
-                'user_id': openapi.Schema(type=openapi.TYPE_STRING, description='Роль для пользователя',
-                                             default='1'),
-            }
+        operation_summary="Назначение роли пользователю",
+        operation_description=(
+                "Метод связывает указанного пользователя с указанной ролью. "
+                "Если связь уже существует, возвращается ошибка."
         ),
-        responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Запись успешно добавлена')
-                }
-            ),
-            400: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка записи ')
-                }
-            ),
-            500: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибки сервера')
-                }
+        manual_parameters=[
+            openapi.Parameter(
+                'role_id',
+                openapi.IN_PATH,
+                description="ID роли, которую необходимо назначить",
+                type=openapi.TYPE_INTEGER,
+                required=True
             )
-        }
+        ],
+        request_body=GrantRoleSerializer,
+        responses={
+            200: openapi.Response(
+                description="Операция успешно завершена",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, example="successes"),
+                        'created': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Создана ли новая запись")
+                    }
+                )
+            ),
+            400: openapi.Response(
+                description="Ошибка валидации или логики",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING,
+                                                example="Эта роль уже назначена данному пользователю"),
+                        'user_id': openapi.Schema(type=openapi.TYPE_ARRAY,
+                                                  items=openapi.Items(type=openapi.TYPE_STRING),
+                                                  description="Ошибки валидации поля user_id")
+                    }
+                )
+            ),
+            404: "Пользователь или Роль не найдены",
+            401: "Не авторизован",
+            403: "Недостаточно прав (adminpanel:manage)"
+        },
+        tags=['Администрирование']
     )
-
     def post(self, request, role_id):
         serializer = GrantRoleSerializer(data=request.data)
         if not serializer.is_valid():
@@ -426,47 +682,65 @@ class AdminGrantRoleView(APIView):
             )
 
         try:
-            obj,created = UserRole.objects.get_or_create(user=user, role=role)
+            obj, created = UserRole.objects.get_or_create(user=user, role=role)
             return Response({"status": "successes", "created": created}, status=status.HTTP_200_OK)
         except IntegrityError:
             return Response({"status": "already exists"}, status=status.HTTP_200_OK)
 
 
-
 class AdminAddPermissionToRoleView(APIView):
+    """
+        Добавить permission к роли.
+        Доступ: Требуется валидный JWT + Сессия в БД (401)
+        и право 'adminpanel:manage' (403).
+    """
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
 
-
     @swagger_auto_schema(
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['permission'],
-            properties={
-                'permission': openapi.Schema(type=openapi.TYPE_STRING, description='Разрешение',
-                                        default='adminpanel:delete'),
-            }
+        operation_summary="Добавление разрешения в роль",
+        operation_description=(
+                "Привязывает существующее разрешение к указанной роли. "
+                "Формат поля 'permission' в теле запроса должен быть 'resource:action'."
         ),
-        responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Запись успешно добавлена')
-                }
-            ),
-            400: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка записи ')
-                }
-            ),
-            500: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='ошибки сервера')
-                }
+        manual_parameters=[
+            openapi.Parameter(
+                'role_id',
+                openapi.IN_PATH,
+                description="ID роли, в которую добавляется разрешение",
+                type=openapi.TYPE_INTEGER,
+                required=True
             )
-        }
+        ],
+        request_body=PermissionAddSerializer,
+        responses={
+            200: openapi.Response(
+                description="Разрешение успешно добавлено",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={'status': openapi.Schema(type=openapi.TYPE_STRING, example="success")}
+                )
+            ),
+            400: openapi.Response(
+                description="Ошибка валидации или дублирования",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={'error': openapi.Schema(type=openapi.TYPE_STRING,
+                                                        example="Это разрешение уже назначено данной роли")}
+                )
+            ),
+            404: openapi.Response(
+                description="Роль или разрешение не найдены",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Разрешение не найдено")}
+                )
+            ),
+            401: "Не авторизован",
+            403: "Недостаточно прав",
+            500: "Внутренняя ошибка сервера"
+        },
+        tags=['Администрирование']
     )
     def post(self, request, role_id):
         try:
@@ -475,7 +749,7 @@ class AdminAddPermissionToRoleView(APIView):
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
             role = get_object_or_404(Role, id=role_id)
-            perm_code = serializer.validated_data['permission'] # пример: "adminpanel:delete"
+            perm_code = serializer.validated_data['permission']  # пример: "adminpanel:delete"
 
             if not perm_code:
                 raise ValidationError("Поле 'permission' не может быть пустым")

@@ -1,33 +1,44 @@
 from pathlib import Path
+from decouple import config  # Библиотека для управления переменными окружения
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Определяем базовую директорию проекта
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+# Секретный ключ приложения, считываемый из переменных окружения
+SECRET_KEY = config('SECRET_KEY')
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-j@0*wws&yyp6)k0bh&q0^po3(b8ldb4+-8q_yk8^%z!pzz!_t0"
-JWT_SECRET = "SECRET_JWT_KEY"
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Секретный ключ JWT, считываемый из переменных окружения
+JWT_SECRET = config('SECRET_JWT_KEY')
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+# Режим отладки: включается/выключается через переменные окружения
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-# Application definition
+# Разрешенные хосты для развертывания проекта
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
-INSTALLED_APPS = [
+# Список приложений Django (встроенные)
+DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+]
 
+# Локальные приложения проекта (созданные пользователем)
+LOCAL_APPS = [
     'app',
+]
+
+# Сторонние приложения, установленные через pip
+THIRD_PARTY_APPS = [
     'rest_framework',
     'drf_yasg',
 ]
+
+# Полный список установленных приложений
+INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -39,8 +50,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Корневая конфигурация URL
 ROOT_URLCONF = "test_em.urls"
 
+# Настройки шаблонов Django
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -57,25 +70,33 @@ TEMPLATES = [
     },
 ]
 
+# WSGI-приложение
 WSGI_APPLICATION = "test_em.wsgi.application"
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'test_em_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '',
+# Настройки базы данных (SQLite по умолчанию, PostgreSQL через переменные окружения)
+if config('USE_POSTGRESQL', default=False, cast=bool):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('POSTGRES_DB'),
+            'USER': config('POSTGRES_USER'),
+            'PASSWORD': config('POSTGRES_PASSWORD'),
+            'HOST': config('POSTGRES_HOST', default='localhost'),
+            'PORT': config('POSTGRES_PORT', default='5432'),
+        }
     }
-}
+else:
+    db_path = BASE_DIR / "db.sqlite3"
 
-# Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            # "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": db_path,
+        }
+    }
 
+# Валидаторы паролей
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -91,26 +112,23 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
-
+# Язык и часовой пояс проекта
 LANGUAGE_CODE = "ru-ru"
-
 TIME_ZONE = "UTC"
 
+# Включение интернационализации и поддержки часовых зон
 USE_I18N = True
-
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
+# Настройки для статических файлов
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
+# Автоматическое поле первичного ключа по умолчанию
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ===== Настройки DRF =====
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         'app.backends.JWTAuthentication',
@@ -118,7 +136,6 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         'rest_framework.permissions.IsAuthenticated',
-        # "rest_framework.permissions.AllowAny",
     ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -128,17 +145,19 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_TOKEN": None,
 }
 
+# Настройки для BCrypt
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
 
+# Настройки пользовательской модели пользователя
 AUTH_USER_MODEL = 'app.User'
 
+# Настройки для SWAGGER
 SWAGGER_SETTINGS = {
     'USE_SESSION_AUTH': False,
     'API_URL': '/api/',  # базовый URL для вашего API
     'DOC_EXPANSION': 'none',  # Сворачивает все эндпоинты по умолчанию
-    # 'DEFAULT_AUTO_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
     'VALIDATOR_URL': None,  # Отключает валидацию Swagger
     'OPERATIONS_SORTER': 'alpha',
     'TAGS_SORTER': 'alpha',
@@ -150,7 +169,7 @@ SWAGGER_SETTINGS = {
         'sessionAuth': {
             'type': 'apiKey',
             'description': (
-                'Куки-токен для аутентификации. Передавайте его в заголовке `Authorization` в формате `Bearer <sessionid>`'),
+                'Токен для авторизации. Передавайте его в заголовке `Authorization` в формате `Bearer <token>`'),
             'name': 'Authorization',
             'in': 'header'
         }

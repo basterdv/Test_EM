@@ -6,9 +6,9 @@ from .utils import get_user_permission_codes, create_access_token
 
 
 class UserListSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    first_name = serializers.CharField()
-    last_name = serializers.CharField()
+    email = serializers.EmailField(help_text="email пользователя")
+    first_name = serializers.CharField(help_text="first_name пользователя")
+    last_name = serializers.CharField(help_text="last_name пользователя")
 
     class Meta:
         model = User
@@ -24,12 +24,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.Serializer):
-    first_name = serializers.CharField()
-    last_name = serializers.CharField()
-    middle_name = serializers.CharField()
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
-    password_repeat = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(help_text="first_name пользователя")
+    last_name = serializers.CharField(help_text="last_name пользователя")
+    middle_name = serializers.CharField(help_text="middle_name пользователя")
+    email = serializers.EmailField(help_text="email пользователя")
+    password = serializers.CharField(help_text="password пользователя",write_only=True)
+    password_repeat = serializers.CharField(help_text="password_repeat пользователя",write_only=True)
 
     def validate_email(self, data):
         if User.objects.filter(email=data).exists():
@@ -51,9 +51,9 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
-    session_id = serializers.CharField(required=True, write_only=True)
+    email = serializers.EmailField(help_text="Email пользователя")
+    password = serializers.CharField(help_text="password пользователя", write_only=True)
+    session_id = serializers.CharField(help_text="session пользователя", required=True, write_only=True)
 
     def validate(self, attrs):
         email = attrs.get('email')
@@ -77,7 +77,7 @@ class LoginSerializer(serializers.Serializer):
         user = validated_data['user']
         session_id = validated_data['session_id']
         perms = get_user_permission_codes(user)
-        token = create_access_token(user, perms,session_id)
+        token = create_access_token(user, perms, session_id)
 
         return {
             "token": token,
@@ -90,8 +90,10 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ('first_name', 'last_name', 'middle_name', 'email')
 
+
 class PermissionAddSerializer(serializers.Serializer):
     permission = serializers.CharField(help_text="Пример: reports:update")
+
 
 class GrantRoleSerializer(serializers.Serializer):
     user_id = serializers.IntegerField(help_text="ID пользователя")

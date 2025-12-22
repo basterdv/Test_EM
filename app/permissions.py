@@ -5,6 +5,9 @@ from rest_framework import exceptions
 
 
 class HasActiveSession(permissions.BasePermission):
+    """
+            Проверка на наличие сессии.
+    """
     def has_permission(self, request, view):
         try:
             # Проверяем, авторизован ли пользователь через JWT
@@ -24,6 +27,9 @@ class HasActiveSession(permissions.BasePermission):
 
 
 class NoActiveSession(permissions.BasePermission):
+    """
+        Проверка на отсутствие сессии.
+    """
     message = "Вы уже авторизованы. Выйдите из системы, чтобы создать новый аккаунт."
 
     def has_permission(self, request, view):
@@ -53,6 +59,9 @@ class IsAdminUserRole(permissions.BasePermission):
 
 
 class RequirePermission(permissions.BasePermission):
+    """
+            Проверка доступа.
+    """
     required_resource = None
     required_action = None
 

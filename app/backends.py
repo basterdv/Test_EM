@@ -44,6 +44,7 @@ class JWTAuthentication(BaseAuthentication):
         if not user.is_active:
             raise exceptions.AuthenticationFailed("Пользователь деактивирован")
 
+        # Запрос в БД
         try:
             session_exists = Session.objects.filter(
                 session_id=cookie_session_id,
@@ -59,7 +60,5 @@ class JWTAuthentication(BaseAuthentication):
 
 
         request.user_obj = user
-
         request.user_permissions = set(payload.get("permissions", []))
-
         return user, None

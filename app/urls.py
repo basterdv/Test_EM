@@ -9,8 +9,9 @@ from app.views import RegisterView, LoginView, ListUser, MeView, DeleteMeView, L
 schema_view = get_schema_view(
     openapi.Info(
         title="API Documentation for TestEm",
-        default_version='v1',
-        description="Test description",
+        default_version='v1.1.2',
+        description="Тестовое Задание для Effective Mobile",
+        terms_of_service="https://disk.360.yandex.ru/i/VtbjR6_G5s8MeQ",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
@@ -24,12 +25,12 @@ urlpatterns = [
     path('api/me/', MeView.as_view(), name='me'),
     path('api/me_delete/', DeleteMeView.as_view(), name='delete_me'),
 
-    path('reports', ReportsListView.as_view()),
-    path('reports/<int:report_id>/update', ReportsUpdateView.as_view()),
+    path('reports', ReportsListView.as_view(),name='reports'),
+    path('reports/<int:report_id>/update', ReportsUpdateView.as_view(),name='update_reports'),
 
-    path('admin/roles', AdminRolesView.as_view()),
-    path('admin/roles/<int:role_id>/grant/', AdminGrantRoleView.as_view()),
-    path('admin/roles/<int:role_id>/add-permission/', AdminAddPermissionToRoleView.as_view()),
+    path('admin/roles', AdminRolesView.as_view(),name='admin_roles'),
+    path('admin/roles/<int:role_id>/grant/', AdminGrantRoleView.as_view(),name='admin_grant_role'),
+    path('admin/roles/<int:role_id>/add-permission/', AdminAddPermissionToRoleView.as_view(),name='admin_add_permission'),
 
     path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
