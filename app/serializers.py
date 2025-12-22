@@ -92,7 +92,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
 
 
 class PermissionAddSerializer(serializers.Serializer):
-    permission = serializers.CharField(help_text="Пример: reports:update")
+    permission = serializers.CharField(help_text="Пример: reports:update",default='reports:update')
 
 
 class GrantRoleSerializer(serializers.Serializer):

@@ -2,6 +2,8 @@ from django.urls import path
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
+from django.conf import settings
+from django.conf.urls.static import static
 
 from app.views import RegisterView, LoginView, ListUser, MeView, DeleteMeView, LogoutView, AdminRolesView, \
     AdminGrantRoleView, AdminAddPermissionToRoleView, ReportsListView, ReportsUpdateView
@@ -36,3 +38,6 @@ urlpatterns = [
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

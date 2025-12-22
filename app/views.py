@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.db import IntegrityError
@@ -347,15 +348,7 @@ class RegisterView(APIView):
     """
     permission_classes = [AllowAny, NoActiveSession]
 
-    # Файковые данные для теста
-    user_data = {
-        'email': fake.email(),
-        'first_name': fake.last_name(),
-        'last_name': fake.last_name(),
-        'middle_name': fake.first_name(),
-        'password': fake.password(length=10),
-    }
-    password = user_data.get('password')
+    password = fake.password(length=10)
 
     @swagger_auto_schema(
         operation_summary="Регистрация нового пользователя",
@@ -363,8 +356,38 @@ class RegisterView(APIView):
                 "Создает новую учетную запись в системе. "
                 "Пароль должен соответствовать требованиям безопасности (минимум 8 символов)."
         ),
-        # Указываем сериализатор для генерации полей ввода в Swagger
-        request_body=RegisterSerializer,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['email', 'password'],
+            properties={
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Электронная почта",
+                    example=fake.email()
+                ),
+                'first_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    example=fake.first_name()
+                ),
+                'last_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    example=fake.last_name()
+                ),
+                'middle_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    example=fake.first_name()
+                ),
+                'password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    example=password
+                ),
+                'password_repeat': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    example=password
+                ),
+            }
+        ),
+
         responses={
             201: openapi.Response(
                 description="Пользователь успешно зарегистрирован",
@@ -416,7 +439,21 @@ class LoginView(APIView):
                 "Принимает email и password. Возвращает JWT-токен и устанавливает "
                 "HTTP-only куку 'sessionid'. Сессия действительна в течение 1 часа."
         ),
-        request_body=LoginSerializer,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['email', 'password'],
+            properties={
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Электронная почта",
+                    example='root@root.ru'
+                ),
+                'password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    example='root'
+                ),
+            },
+        ),
         responses={
             200: openapi.Response(
                 description="Успешный вход",

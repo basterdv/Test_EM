@@ -1,5 +1,6 @@
 from pathlib import Path
 from decouple import config  # Библиотека для управления переменными окружения
+import os
 
 # Определяем базовую директорию проекта
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -13,6 +14,7 @@ JWT_SECRET = config('SECRET_JWT_KEY')
 # Режим отладки: включается/выключается через переменные окружения
 DEBUG = config('DEBUG', default=False, cast=bool)
 
+
 # Разрешенные хосты для развертывания проекта
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
@@ -25,6 +27,8 @@ DJANGO_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
+
+
 
 # Локальные приложения проекта (созданные пользователем)
 LOCAL_APPS = [
