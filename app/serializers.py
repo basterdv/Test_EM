@@ -96,4 +96,4 @@ class PermissionAddSerializer(serializers.Serializer):
 
 
 class GrantRoleSerializer(serializers.Serializer):
-    user_id = serializers.IntegerField(help_text="ID пользователя")
+    user_id = serializers.IntegerField(help_text="ID пользователя",default=1)
