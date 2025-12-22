@@ -1,81 +1,88 @@
-# RBAC Auth Service (Django REST Framework + JWT)
+# EffectiveMobile Test ,  Auth Service (Django REST Framework + JWT + Session)
 
-## Что это
+## Описание
 
-Это учебно-боевой backend на Django REST Framework + PostgreSQL, который демонстрирует:
+Это тестовый backend на Django REST Framework + PostgreSQL, который демонстрирует:
 - собственную аутентификацию пользователей по email/паролю;
 - сессии на основе короткоживущего JWT (без Django SessionMiddleware и без встроенной auth-системы Django);
-- собственную модель разграничения прав доступа (RBAC: роли и разрешения);
+- собственную модель разграничения прав доступа (роли и разрешения);
 - проверку доступа к ресурсам с корректными статусами 401 / 403;
 - «мягкое удаление» пользователя (деактивация без физического удаления строки);
-- административное API для управления ролями и правами в рантайме.
-
-Важный момент: проект намеренно **НЕ использует** `django.contrib.auth`, `django.contrib.auth.models.User`, `django.contrib.auth.models.Permission`, `IsAuthenticated`, `SessionAuthentication` и т.д.  
-Все сущности (пользователь, роль, доступы) реализованы вручную.
+- административное API для управления ролями и правами.
 
 ---
 
-## Архитектура авторизации
+## Архитектура 
 
-### Термины
-- **User** — человек (имя, почта, пароль в хэше, флаг активности).
-- **Role** — «набор прав» (например, `admin`, `analyst`).
-- **Permission** — конкретное действие над конкретным ресурсом. Хранится как `resource:action`, например `reports:update`.
-- **JWT access token** — выдаётся при логине. Содержит:
-  - `sub` — ID пользователя,
-  - `email`,
-  - `is_active`,
-  - `permissions` — список прав пользователя на момент логина,
-  - сроки жизни (`iat`, `exp`).
+### Схема базы данных 
+1. User: Основная таблица пользователей. 
+   - id: уникальный идентификатор пользователя.
+   - first_name: имя пользователя.
+   - last_name: фамилия пользователя.
+   - middle_name: отчество пользователя.
+   - email: адрес электронной почты пользователя.
+   - password: зашифрованный пароль пользователя.
+   - is_active: булево значение, указывающее, активен ли пользователь.
+   
 
-### Почему JWT, а не таблица сессий
-- Stateless: сервер не хранит активные сессии.
-- Легко проверить токен в любом сервисе.
-- Хорошо видно на защите.
+2. Role: Таблица ролей пользователей. 
+   - id: уникальный идентификатор роли.
+   - name: название роли (например, ‘admin’, ‘user’).
+   
+   
+3. Resource: Таблица ресурсов 
+    - id: уникальный идентификатор ресурса.
+    - name: название ресурса (например, ‘adminpanel’, ‘reports’...).
+   
 
-Компромисс: если администратор поменяет пользователю роли/права, уже выданный токен об этом не узнает. Пользователь должен перелогиниться, чтобы получить обновлённый набор `permissions`. Это осознанный минус stateless-дизайна.
+4. Action: Таблица разрешенных действий.
+    - id: уникальный идентификатор.
+    - name: название действия (например, ("Чтение", "Обновление", ...).
+    - description: описание
 
----
 
-## RBAC-модель
+5. Permission: таблица прав доступа для конкретного ресурса. 
+   - id: уникальный идентификатор.
+   - resource: ресурс из связаной таблице Resource
+   - action: название действия, из связаной таблице Action
+   - description: описание
+   
+   
+6. UserRole: таблица для связи между пользователями и ролями. 
+   - id: уникальный идентификатор записи.
+   - user_id: ссылка на пользователя.
+   - role_id: ссылка на роль.
+   
 
-Система прав построена как классический RBAC:
+7. RolePermission: таблица для связи между ролями и правами. 
+   - id: уникальный идентификатор записи.
+   - role_id: ссылка на роль.
+   - permission_id: ссылка на право.
 
-```text
-User --(многие-ко-многим)--> Role --(многие-ко-многим)--> Permission
-Permission = Resource + Action
-````
 
-* **Resource** — логическая область системы (`"reports"`, `"adminpanel"`, `"users"` ...).
-* **Action** — тип разрешённого действия (`"read"`, `"update"`, `"manage"` ...).
+8. Session:  Таблица сессий
+    - id: уникальный идентификатор записи
+   - user: ссылка на пользователя.
+    - session_id: индификатор сессии
+    - token_id: токен
+   
 
-Одна Permission = пара (`Resource`, `Action`):
 
-* Resource = `reports`
-* Action  = `update`
-* Код разрешения = `reports:update`
-
-Примеры:
-
-* Роль `admin` имеет `adminpanel:manage`, `reports:read`, `reports:update`.
-* Роль `analyst` имеет только `reports:read`.
-
----
-
-## Жизненный цикл запроса
-
-1. Клиент отправляет запрос с заголовком
+## Цикл запроса
+1. При регистрации клиенту выдается токен в котором прописанны права и индификатор ссесии которай хранится в базе данных
+2. Клиент отправляет запрос с заголовком
    `Authorization: Bearer <jwt>`.
 2. Кастомный `JWTAuthentication`:
 
    * декодирует токен с помощью `settings.JWT_SECRET` и `HS256`,
    * проверяет срок `exp`,
    * проверяет, что пользователь существует и `is_active == True`,
+   * проверяет о соответствии сохраненной сессии
    * вешает на `request`:
 
      * `request.user_obj` — сам пользователь из БД,
      * `request.user_permissions` — множество строк вида `"resource:action"` (например, `"reports:update"`).
-3. Вьюха указывает, какое право требуется:
+3. View указывает, какое право требуется:
 
    ```python
    permission_classes = [RequirePermission.as_perm("reports", "update")]
@@ -95,78 +102,43 @@ Permission = Resource + Action
 
 ## Мягкое удаление пользователя
 
-`DELETE /me/delete`:
+`DELETE api/me_delete`:
 
 * ставит `is_active = False` у текущего пользователя;
-* пользователь сразу теряет возможность логиниться;
+* удаляет сессию из БД
 * старый токен тоже становится бесполезен, потому что аутентификация на каждом запросе проверяет `user.is_active`.
   После деактивации любая попытка использовать токен вернёт 401.
 
-Запись при этом физически остаётся в базе (для аудита и истории).
+Запись при этом физически остаётся в БД
 
 ---
 
-## Основные модели (упрощённо)
-
-* `User`
-  `email`, `password_hash`, `first_name`, `last_name`, `patronymic`, `is_active`, `created_at`, `updated_at`.
-
-* `Role`
-  `name` (например, `"admin"`, `"analyst"`), `description`.
-
-* `UserRole`
-  связь многие-ко-многим между User ↔ Role.
-
-* `Resource`
-  `name` (`"reports"`, `"adminpanel"`), `description`.
-
-* `Action`
-  `name` (`"read"`, `"update"`, `"manage"`), `description`.
-
-* `Permission`
-  `(resource, action)` → код `"resource:action"`.
-
-* `RolePermission`
-  связь многие-ко-многим между Role ↔ Permission.
-
-### Важно
-
-Нет модели `Session`.
-JWT выступает в роли сессии.
-
----
 
 ## Основные эндпоинты API
 
 ### 1. Регистрация
 
-`POST /auth/register`
+`POST api/register/`
 
 Пример запроса:
 
 ```json
 {
-  "first_name": "Алиса",
-  "last_name": "Кэрол",
-  "patronymic": "Льюисовна",
-  "email": "alice@wonderland.com",
-  "password": "123456",
-  "password_repeat": "123456"
+  "first_name": "Ярополк",
+  "last_name": "Трофимов",
+  "patronymic": "Савелий",
+  "email": "demjan2022@example.com",
+  "password": "7LWoIS",
+  "password_repeat": "7LWoIS"
 }
 ```
 
 Ответ (201):
 
 ```json
+
 {
-  "id": 2,
-  "first_name": "Алиса",
-  "last_name": "Кэрол",
-  "patronymic": "Льюисовна",
-  "email": "alice@wonderland.com",
-  "is_active": true,
-  "created_at": "...",
-  "updated_at": "..."
+  "message": "Пользователь demjan2022@example.com зарегистрирован успешно"
 }
 ```
 
@@ -178,8 +150,8 @@ JWT выступает в роли сессии.
 
 ```json
 {
-  "email": "admin@wonderland.com",
-  "password": "123456"
+  "email": "root@root.ru",
+  "password": "root"
 }
 ```
 
@@ -190,12 +162,12 @@ JWT выступает в роли сессии.
   "token": "<JWT>",
   "user": {
     "id": 1,
-    "first_name": "Администратор",
-    "last_name": "Системы",
-    "email": "admin@wonderland.com",
+    "first_name": "Pakghg",
+    "last_name": "Yhserr",
+    "email": "root@root.ru",
     "is_active": true,
-    "created_at": "...",
-    "updated_at": "..."
+    "created_at": "2025-12-21T15:44:37.513738Z",
+    "updated_at": "2025-12-22T15:10:20.422287Z"
   }
 }
 ```
@@ -210,32 +182,16 @@ Authorization: Bearer <JWT>
 
 ### 3. Профиль текущего пользователя
 
-`GET /me`
+`GET api/me/`
 
 * Требует валидный JWT.
 * Возвращает профиль текущего пользователя.
 
-Ошибки:
-
-* нет/битый токен → 401.
-
 ---
 
-### 4. Обновление профиля
+### 4. Мягкое удаление аккаунта
 
-`PATCH /me`
-
-Позволяет менять, например, имя или email.
-
-Ошибки:
-
-* нет токена → 401.
-
----
-
-### 5. Мягкое удаление аккаунта
-
-`DELETE /me/delete`
+`DELETE api/me_delete`
 
 * Ставит `is_active = false`.
 * После этого логин перестаёт работать.
@@ -243,7 +199,7 @@ Authorization: Bearer <JWT>
 
 ---
 
-### 6. Бизнес-объекты (мок)
+### 5. Бизнес-объекты (мок)
 
 `GET /reports`
 
@@ -258,17 +214,15 @@ Authorization: Bearer <JWT>
 
 ---
 
-### 7. Обновление бизнес-объекта (мок)
+### 6. Обновление бизнес-объекта (мок)
 
-`POST /reports/<id>/update`
+`POST reports/<report_id>/update`
 
 * Требуется право `reports:update`.
-* По умолчанию у аналитика этого права нет, у админа есть.
 * Администратор может выдать права роли аналитика через админ-API.
-
 ---
 
-### 8. Админка ролей
+### 7. Админка ролей
 
 `GET /admin/roles`
 
@@ -283,12 +237,35 @@ Authorization: Bearer <JWT>
     {
       "role_id": 1,
       "role_name": "admin",
-      "permissions": ["reports:read", "reports:update", "adminpanel:manage"]
+      "permissions": [
+        "adminpanel:read",
+        "adminpanel:update",        
+        "reports:delete",
+        "reports:manage"
+      ]
+    },
+    {
+      "role_id": 3,
+      "role_name": "editor",
+      "permissions": [        
+        "reports:read",
+        "reports:update"
+      ]
+    },
+    {
+      "role_id": 4,
+      "role_name": "manager",
+      "permissions": [
+        "reports:read",       
+        "reports:manage"
+      ]
     },
     {
       "role_id": 2,
-      "role_name": "analyst",
-      "permissions": ["reports:read"]
+      "role_name": "user",
+      "permissions": [
+        "adminpanel:read"       
+      ]
     }
   ]
 }
@@ -296,7 +273,7 @@ Authorization: Bearer <JWT>
 
 ---
 
-### 9. Назначить роль пользователю
+### 8. Назначить роль пользователю
 
 `POST /admin/roles/{role_id}/grant`
 
@@ -308,7 +285,7 @@ Authorization: Bearer <JWT>
 
 ---
 
-### 10. Добавить permission к роли
+### 9. Добавить permission к роли
 
 `POST /admin/roles/{role_id}/add-permission`
 
@@ -317,43 +294,48 @@ Authorization: Bearer <JWT>
 ```
 
 Добавляет `reports:update` к указанной роли через `RolePermission`.
-После этого все пользователи с этой ролью получат право `reports:update` в НОВОМ токене (нужно перелогиниться, чтобы получить новый JWT с обновлённым списком `permissions`).
+После этого все пользователи с этой ролью получат право `reports:update` 
+в НОВОМ токене (нужно перелогиниться, чтобы получить новый JWT с обновлённым списком `permissions`).
 
 ---
 
 ## Инициализация проекта
 
-### 1. Установить зависимости через Poetry
+### 1. Установить зависимости 
 
 ```bash
-poetry install 
-# poetry install --with postgres - для использования PostgreSQL вместо SQLite
-poetry run python manage.py migrate
+pip install -r requirements.txt
 ```
-
-Для PostgreSQL следующие переменные окружения в `.env` должны быть заданы:
+Создать .env
+Переменные окружения в `.env` должны быть заданы:
 
 ```env
-POSTGRES_DB=rbac_demo
-POSTGRES_USER=rbac_user
-POSTGRES_PASSWORD=rbac_pass
+# Основные настройки Django
+DEBUG=True
+SECRET_KEY=django-insecure-SECRET_KEY
+SECRET_JWT_KEY=SECRET_JWT_KEY
+ALLOWED_HOSTS=127.0.0.1,localhost
+
+# Настройки базы данных (PostgreSQL)
+USE_POSTGRESQL=True
+POSTGRES_DB=test_em_db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=1234
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 ```
 
-если они не заданы - будет использоваться локальная база SQLite
-
 ### 2. Миграции
 
 ```bash
-poetry run python manage.py makemigrations
-poetry run python manage.py migrate
+python manage.py makemigrations
+python manage.py migrate
 ```
 
-### 4. Фикстуры
+### 3. Фикстуры
 
 ```bash
-poetry run python manage.py loaddata emauth/fixtures/initial_data.json
+python manage.py loaddata app/fixtures/initial_data.json
 ```
 
 Фикстуры создают:
@@ -363,18 +345,18 @@ poetry run python manage.py loaddata emauth/fixtures/initial_data.json
 * права `Permission` (`reports:read`, `reports:update`, `adminpanel:manage`);
 * роли `Role` (`admin`, `analyst`);
 * связи ролей с правами;
-* тестового пользователя `admin@wonderland.com` с паролем `123456`;
+* тестового пользователя `root@root.ru` с паролем `root`;
 * назначение роли `admin` этому пользователю.
 
-### 5. Запуск
+### 4. Запуск
 
 ```bash
-poetry run python manage.py runserver
+python manage.py runserver
 ```
 
 После этого:
 
-* `POST /auth/login` → получить токен
-* `GET /me` → профиль текущего пользователя
+* `POST /api/login` → получить токен
+* `GET /api/me` → профиль текущего пользователя
 * `GET /reports` → проверка `reports:read`
 * `GET /admin/roles` → проверка `adminpanel:manage`
