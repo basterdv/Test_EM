@@ -6,11 +6,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import exceptions
 from .permissions import HasActiveSession, NoActiveSession, RequirePermission
-from .serializers import RegisterSerializer, UserProfileSerializer, LoginSerializer, UserListSerializer
+from .serializers import RegisterSerializer, UserProfileSerializer, LoginSerializer, UserListSerializer, \
+    PermissionAddSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from app.backends import JWTAuthentication
 
-from .models import User, Session, Role, RolePermission,Permission,UserRole
+from .models import User, Session, Role, RolePermission, Permission, UserRole
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import uuid
@@ -304,19 +305,16 @@ class AdminRolesView(APIView):
     def get(self, request):
         data = []
         for role in Role.objects.all():
-            print(role)
+
             perms = []
+
             rps = role.role_permissions.select_related(
+                'permission__resource',
                 'permission__action'
             )
 
-            # rps = role.role_permissions.select_related(
-            #     # 'permission__resource',
-            #     'permission__action'
-            # )
-            print(rps)
-            # for rp in rps:
-            #     perms.append(rp.permission.code())
+            for rp in rps:
+                perms.append(rp.permission.code())
 
             data.append({
                 "role_id": role.id,
@@ -344,15 +342,55 @@ class AdminAddPermissionToRoleView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
 
+    # serializer_class = PermissionAddSerializer
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['permission'],
+            properties={
+                'permission': openapi.Schema(type=openapi.TYPE_STRING, description='Email пользователя',
+                                        default='reports:update'),
+            }
+        ),
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Ключ токена')
+                }
+            ),
+            400: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка - ')
+                }
+            ),
+            500: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='ошибки сервера')
+                }
+            )
+        }
+    )
     def post(self, request, role_id):
-        perm_code = request.data.get("permission")  # пример: "reports:update"
-        res_name, action_name = perm_code.split(":", 1)
+        try:
 
-        perm = Permission.objects.select_related('resource', 'action').get(
-            resource__name=res_name,
-            action__name=action_name
-        )
-        role = get_object_or_404(Role, id=role_id)
+            perm_code = request.data.get("permission")  # пример: "reports:update"
+            print(perm_code)
 
-        RolePermission.objects.get_or_create(role=role, permission=perm)
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+            res_name, action_name = perm_code.split(":", 1)
+
+            perm = Permission.objects.select_related('resource', 'action').get(
+                resource__name=res_name,
+                action__name=action_name
+            )
+            role = get_object_or_404(Role, id=role_id)
+
+            RolePermission.objects.get_or_create(role=role, permission=perm)
+            return Response({"status": "ok"}, status=status.HTTP_200_OK)
+        except (ObjectDoesNotExist, IntegrityError) as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

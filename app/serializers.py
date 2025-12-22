@@ -89,3 +89,6 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('first_name', 'last_name', 'middle_name', 'email')
+
+class PermissionAddSerializer(serializers.Serializer):
+    permission = serializers.CharField(help_text="Пример: reports:update")

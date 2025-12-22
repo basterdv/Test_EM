@@ -59,7 +59,7 @@ class RequirePermission(permissions.BasePermission):
     @classmethod
     def as_perm(cls, resource, action):
         class _ConcreteRequirePermission(cls):
-            # required_resource = resource
+            required_resource = resource
             required_action = action
 
         return _ConcreteRequirePermission
@@ -71,12 +71,11 @@ class RequirePermission(permissions.BasePermission):
         if not user:
             raise exceptions.NotAuthenticated("Пользователь не авторизирован")
 
-        # required_code = f"{self.required_resource}:{self.required_action}"
+        required_code = f"{self.required_resource}:{self.required_action}"
 
         perms = getattr(request, 'user_permissions', set())
 
-        # if required_code in perms:
-        if self.required_action in perms:
+        if required_code in perms:
             return True
 
         raise exceptions.PermissionDenied("Доступ запрещён")

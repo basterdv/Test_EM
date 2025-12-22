@@ -26,8 +26,8 @@ urlpatterns = [
     path('api/me_delete/', DeleteMeView.as_view(), name='delete_me'),
 
     path('admin/roles', AdminRolesView.as_view()),
-    path('admin/roles/<int:role_id>/grant', AdminGrantRoleView.as_view()),
-    path('admin/roles/<int:role_id>/add-permission', AdminAddPermissionToRoleView.as_view()),
+    path('admin/roles/<int:role_id>/grant/', AdminGrantRoleView.as_view()),
+    path('admin/roles/<int:role_id>/add-permission/', AdminAddPermissionToRoleView.as_view()),
 
     path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),

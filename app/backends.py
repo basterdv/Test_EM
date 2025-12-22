@@ -57,8 +57,6 @@ class JWTAuthentication(BaseAuthentication):
             raise exceptions.AuthenticationFailed('Ошибка проверки привязки сессии')
 
 
-
-
         request.user_obj = user
 
         request.user_permissions = set(payload.get("permissions", []))

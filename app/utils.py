@@ -28,9 +28,12 @@ def get_user_permission_codes(user):
     codes = set()
 
     for ur in user.user_roles.select_related('role'):
-
         role = ur.role
-        for rp in role.role_permissions.select_related('permission'):
+        for rp in role.role_permissions.select_related(
+                'permission__resource',
+                'permission__action'
+        ):
             perm = rp.permission
-            codes.add(f"{perm}")
+            codes.add(f"{perm.resource.name}:{perm.action.name}")
+
     return codes
