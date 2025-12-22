@@ -19,6 +19,5 @@ class UserRole(admin.ModelAdmin):
         'description',
     )
 
-
 admin.site.register(User, UserAdmin)
 admin.site.register(Role, UserRole)

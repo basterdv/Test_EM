@@ -92,3 +92,6 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
 
 class PermissionAddSerializer(serializers.Serializer):
     permission = serializers.CharField(help_text="Пример: reports:update")
+
+class GrantRoleSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField(help_text="ID пользователя")

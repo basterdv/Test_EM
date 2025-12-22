@@ -28,6 +28,7 @@ class JWTAuthentication(BaseAuthentication):
         user_id = payload.get("sub")
         session_id_in_token = payload.get("session_id")
 
+
         if not user_id or not session_id_in_token:
             raise exceptions.AuthenticationFailed('Payload токена неполон или Токен не привязан к сессии')
 

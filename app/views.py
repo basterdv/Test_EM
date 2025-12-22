@@ -1,4 +1,4 @@
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework import exceptions
 from .permissions import HasActiveSession, NoActiveSession, RequirePermission
 from .serializers import RegisterSerializer, UserProfileSerializer, LoginSerializer, UserListSerializer, \
-    PermissionAddSerializer
+    PermissionAddSerializer,GrantRoleSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from app.backends import JWTAuthentication
 
@@ -18,6 +18,19 @@ import uuid
 from django.utils import timezone
 
 from faker import Faker
+
+fake = Faker(['ru_RU'])
+
+# Генерируем 10 фейковых отчетов
+FAKE_REPORTS = [
+    {
+        "id": i,
+        "title": fake.catch_phrase(),
+        "owner": fake.name(),
+        "created_at": fake.date_this_year().isoformat(),
+        "content": fake.text(max_nb_chars=100)
+    } for i in range(1, 11)
+]
 
 
 class ListUser(APIView):
@@ -32,6 +45,43 @@ class ListUser(APIView):
         # return Response({'users':list(users_list)}, status=status.HTTP_200_OK)
         return Response({'users': serializer}, status=status.HTTP_200_OK)
 
+
+class ReportsListView(APIView):
+    """
+    Получение списка отчетов.
+    Доступ: Требуется валидный JWT + Сессия в БД (401)
+    и право 'reports:read' (403).
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [RequirePermission.as_perm("reports", "read")]
+
+    def get(self, request):
+        return Response({
+            "count": len(FAKE_REPORTS),
+            "reports": FAKE_REPORTS
+        })
+
+
+class ReportsUpdateView(APIView):
+    """
+    Обновление отчета.
+    Доступ: право 'reports:update' (403).
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [RequirePermission.as_perm("reports", "update")]
+
+    def post(self, request, report_id: int):
+        # Поиск отчета в нашем фейковом списке
+        report = next((r for r in FAKE_REPORTS if r["id"] == report_id), None)
+
+        if not report:
+            return Response({"error": "Report not found"}, status=404)
+
+        return Response({
+            "status": "success",
+            "updated_report": report["title"],
+            "modified_at": timezone.now().isoformat()
+        })
 
 class MeView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -136,8 +186,7 @@ class DeleteMeView(APIView):
 class RegisterView(APIView):
     permission_classes = [AllowAny, NoActiveSession]
 
-    fake = Faker()
-
+    # Файковые данные для теста
     user_data = {
         'email': fake.email(),
         'first_name': fake.last_name(),
@@ -329,41 +378,86 @@ class AdminGrantRoleView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
 
-    def post(self, request, role_id):
-        user_id = request.data.get("user_id")
-        user = get_object_or_404(User, id=user_id)
-        role = get_object_or_404(Role, id=role_id)
-
-        UserRole.objects.get_or_create(user=user, role=role)
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
-
-
-class AdminAddPermissionToRoleView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
-
-    # serializer_class = PermissionAddSerializer
-
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=['permission'],
             properties={
-                'permission': openapi.Schema(type=openapi.TYPE_STRING, description='Email пользователя',
-                                        default='reports:update'),
+                'user_id': openapi.Schema(type=openapi.TYPE_STRING, description='Роль для пользователя',
+                                             default='1'),
             }
         ),
         responses={
             200: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Ключ токена')
+                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Запись успешно добавлена')
                 }
             ),
             400: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка - ')
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка записи ')
+                }
+            ),
+            500: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибки сервера')
+                }
+            )
+        }
+    )
+
+    def post(self, request, role_id):
+        serializer = GrantRoleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user_id = serializer.validated_data['user_id']
+
+        user = get_object_or_404(User, id=user_id)
+        role = get_object_or_404(Role, id=role_id)
+
+        if UserRole.objects.filter(user=user, role=role).exists():
+            return Response(
+                {"error": "Эта роль уже назначена данному пользователю"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            obj,created = UserRole.objects.get_or_create(user=user, role=role)
+            return Response({"status": "successes", "created": created}, status=status.HTTP_200_OK)
+        except IntegrityError:
+            return Response({"status": "already exists"}, status=status.HTTP_200_OK)
+
+
+
+class AdminAddPermissionToRoleView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [RequirePermission.as_perm("adminpanel", "manage")]
+
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['permission'],
+            properties={
+                'permission': openapi.Schema(type=openapi.TYPE_STRING, description='Разрешение',
+                                        default='adminpanel:delete'),
+            }
+        ),
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'token': openapi.Schema(type=openapi.TYPE_STRING, description='Запись успешно добавлена')
+                }
+            ),
+            400: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='Ошибка записи ')
                 }
             ),
             500: openapi.Schema(
@@ -376,21 +470,30 @@ class AdminAddPermissionToRoleView(APIView):
     )
     def post(self, request, role_id):
         try:
+            serializer = PermissionAddSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            perm_code = request.data.get("permission")  # пример: "reports:update"
-            print(perm_code)
+            role = get_object_or_404(Role, id=role_id)
+            perm_code = serializer.validated_data['permission'] # пример: "adminpanel:delete"
+
+            if not perm_code:
+                raise ValidationError("Поле 'permission' не может быть пустым")
+            if ':' not in perm_code:
+                raise ValidationError("Поле 'permission' должно содержать двоеточие в формате 'resource:action'")
 
             res_name, action_name = perm_code.split(":", 1)
+            perm = Permission.objects.get(resource__name=res_name, action__name=action_name)
 
-            perm = Permission.objects.select_related('resource', 'action').get(
-                resource__name=res_name,
-                action__name=action_name
-            )
-            role = get_object_or_404(Role, id=role_id)
+            role_permission, created = RolePermission.objects.get_or_create(role=role, permission=perm)
+            if not created:
+                return Response({"error": "Это разрешение уже назначено данной роли"},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-            RolePermission.objects.get_or_create(role=role, permission=perm)
-            return Response({"status": "ok"}, status=status.HTTP_200_OK)
-        except (ObjectDoesNotExist, IntegrityError) as e:
-            return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({"status": "success"}, status=status.HTTP_200_OK)
+        except (ValidationError, ObjectDoesNotExist, IntegrityError) as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Permission.DoesNotExist:
+            return Response({"error": "Разрешение не найдено"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": "Внутренняя ошибка сервера"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

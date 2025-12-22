@@ -1,11 +1,10 @@
 from django.urls import path
-
-from app.serializers import UserProfileSerializer
-from app.views import RegisterView, LoginView, ListUser, MeView, DeleteMeView, LogoutView, AdminRolesView, \
-    AdminGrantRoleView, AdminAddPermissionToRoleView
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from drf_yasg.views import get_schema_view
+from rest_framework import permissions
+
+from app.views import RegisterView, LoginView, ListUser, MeView, DeleteMeView, LogoutView, AdminRolesView, \
+    AdminGrantRoleView, AdminAddPermissionToRoleView, ReportsListView, ReportsUpdateView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -24,6 +23,9 @@ urlpatterns = [
     path('api/users_list/', ListUser.as_view(), name='users'),
     path('api/me/', MeView.as_view(), name='me'),
     path('api/me_delete/', DeleteMeView.as_view(), name='delete_me'),
+
+    path('reports', ReportsListView.as_view()),
+    path('reports/<int:report_id>/update', ReportsUpdateView.as_view()),
 
     path('admin/roles', AdminRolesView.as_view()),
     path('admin/roles/<int:role_id>/grant/', AdminGrantRoleView.as_view()),

@@ -80,7 +80,9 @@ class UserRole(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_users')
 
     class Meta:
-        unique_together = ('user', 'role')
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'role'], name='unique_user_role')
+        ]
 
 
 class Resource(models.Model):
@@ -135,7 +137,9 @@ class RolePermission(models.Model):
     permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name='permission_roles')
 
     class Meta:
-        unique_together = ('role', 'permission')
+        constraints = [
+            models.UniqueConstraint(fields=['role', 'permission'], name='unique_role_permission')
+        ]
 
 
 class Session(models.Model):
